@@ -1,54 +1,50 @@
 import streamlit as st
+from modules.docx_reader import extract_tables_from_docx
+from modules.excel_exporter import tables_to_excel
 import os
-from modules.extract import extract_tables_from_pdf
-from modules.parser import parse_risk_scenario_tables
-from modules.exporter import export_to_excel
 
-st.title("📄 Risk Scenario PDF → Excel Converter")
-st.write("Upload one or multiple PDF files to extract Risk Scenario tables automatically.")
+st.title("📄 Word Table → Excel Extractor")
+st.write("Upload multiple DOCX files and extract all tables into Excel automatically.")
 
 uploaded_files = st.file_uploader(
-    "Upload PDF files",
-    type=["pdf"],
+    "Upload Word files (.docx)",
+    type=["docx"],
     accept_multiple_files=True
 )
 
-output_dir = "output"
+OUTPUT_DIR = "output"
 
 if uploaded_files:
-    st.info(f"Processing {len(uploaded_files)} files...")
+    st.info(f"Processing {len(uploaded_files)} Word files...")
 
-    for pdf in uploaded_files:
-        with st.spinner(f"Extracting data from: {pdf.name}"):
+    for file in uploaded_files:
+        with st.spinner(f"Extracting tables from {file.name}..."):
 
-            # Extract all tables
-            tables = extract_tables_from_pdf(pdf)
-
-            # Parse only risk scenario rows
-            parsed_rows = parse_risk_scenario_tables(tables)
-
-            if not parsed_rows:
-                st.warning(f"No risk scenario table found in {pdf.name}")
+            try:
+                tables = extract_tables_from_docx(file)
+            except Exception as e:
+                st.error(f"Error reading {file.name}: {e}")
                 continue
 
-            # Export to Excel
+            if not tables:
+                st.warning(f"No tables found in {file.name}")
+                continue
+
             output_path = os.path.join(
-                output_dir,
-                pdf.name.replace(".pdf", "_Risk_Scenarios.xlsx")
+                OUTPUT_DIR,
+                file.name.replace(".docx", "_tables.xlsx")
             )
 
-            export_to_excel(parsed_rows, output_path)
+            tables_to_excel(tables, output_path)
 
-            st.success(f"Extracted & saved: {output_path}")
+            st.success(f"Extracted: {output_path}")
 
-            # Download button
             with open(output_path, "rb") as f:
                 st.download_button(
-                    label=f"Download Excel for {pdf.name}",
+                    label=f"⬇️ Download Excel for {file.name}",
                     data=f,
                     file_name=os.path.basename(output_path),
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
 
-    st.success("All files processed successfully! 🎉")
-``
+    st.success("🎉 All files processed successfully!")
