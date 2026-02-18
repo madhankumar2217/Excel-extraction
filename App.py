@@ -1,55 +1,54 @@
-import pdfplumber
-import pandas as pd
+import streamlit as st
 import os
-import re
+from modules.extract import extract_tables_from_pdf
+from modules.parser import parse_risk_scenario_tables
+from modules.exporter import export_to_excel
 
-input_folder = "RiskPDFs"
-output_folder = "output"
+st.title("📄 Risk Scenario PDF → Excel Converter")
+st.write("Upload one or multiple PDF files to extract Risk Scenario tables automatically.")
 
-os.makedirs(output_folder, exist_ok=True)
+uploaded_files = st.file_uploader(
+    "Upload PDF files",
+    type=["pdf"],
+    accept_multiple_files=True
+)
 
-def extract_risk_table(pdf_path):
-    rows = []
-    with pdfplumber.open(pdf_path) as pdf:
-        for page in pdf.pages:
-            tables = page.extract_tables()
-            for table in tables:
-                # Filter rows that contain numerical Ref No (1–9+)
-                for row in table:
-                    if row and re.match(r"^\s*\d+\s*$", str(row[1])):
-                        ref_no = int(row[1])
-                        section = row[2]
-                        scenario = row[3]
-                        harmful_effect = row[4]
-                        severity_before = row[5]
-                        prob_before = row[6]
-                        protective = row[7]
-                        severity_after = row[8]
-                        prob_after = row[9]
+output_dir = "output"
 
-                        rows.append([
-                            ref_no, section, scenario, harmful_effect,
-                            severity_before, prob_before,
-                            protective, severity_after, prob_after
-                        ])
-    return rows
+if uploaded_files:
+    st.info(f"Processing {len(uploaded_files)} files...")
 
-for file in os.listdir(input_folder):
-    if file.endswith(".pdf"):
-        pdf_path = os.path.join(input_folder, file)
-        data = extract_risk_table(pdf_path)
+    for pdf in uploaded_files:
+        with st.spinner(f"Extracting data from: {pdf.name}"):
 
-        df = pd.DataFrame(data, columns=[
-            "Ref No", "Section / Point", "Scenario",
-            "Harmful Event / Effect", "Severity (Before)",
-            "Probability (Before)", "Protective Measures",
-            "Severity (After)", "Probability (After)"
-        ])
+            # Extract all tables
+            tables = extract_tables_from_pdf(pdf)
 
-        out_file = os.path.join(
-            output_folder,
-            file.replace(".pdf", "_Risk_Scenarios.xlsx")
-        )
-        df.to_excel(out_file, index=False, engine="openpyxl")
+            # Parse only risk scenario rows
+            parsed_rows = parse_risk_scenario_tables(tables)
 
-        print("Created:", out_file)
+            if not parsed_rows:
+                st.warning(f"No risk scenario table found in {pdf.name}")
+                continue
+
+            # Export to Excel
+            output_path = os.path.join(
+                output_dir,
+                pdf.name.replace(".pdf", "_Risk_Scenarios.xlsx")
+            )
+
+            export_to_excel(parsed_rows, output_path)
+
+            st.success(f"Extracted & saved: {output_path}")
+
+            # Download button
+            with open(output_path, "rb") as f:
+                st.download_button(
+                    label=f"Download Excel for {pdf.name}",
+                    data=f,
+                    file_name=os.path.basename(output_path),
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+
+    st.success("All files processed successfully! 🎉")
+``
